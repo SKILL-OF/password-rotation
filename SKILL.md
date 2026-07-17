@@ -35,18 +35,35 @@ The notification contains only: index, level, reason, timestamp — no credentia
 
 ```bash
 # Setup (run with human present, once per rotation slot)
-bash scripts/enroll-rotation.sh      # enroll one future queue entry interactively
+bash scripts/enroll-rotation.sh                        # enroll one future queue entry interactively
+bash scripts/enroll-card-swap.sh --card P2E.1          # enroll current pattern on a different card (autonomous)
 
 # Status
-bash scripts/rotation-status.sh      # show current index, level, remaining slots
+bash scripts/rotation-status.sh                        # show current index, level, remaining slots
 
-# Rotation (autonomous — no human needed at rotation time)
-bash scripts/rotate.sh               # advance to next queue entry, notify human
-bash scripts/rotate.sh --dry-run     # preview what would change without doing it
+# Vault-only rotation (does NOT change platform password — use for keys/tokens, not passwords)
+bash scripts/rotate.sh                                 # advance vault pointer to next slot, notify human
+bash scripts/rotate.sh --dry-run                       # preview without executing
+
+# Two-phase rotation — vault + platform change (use for account passwords)
+bash scripts/assemble-slot.sh [--index N]              # decrypt slot N and assemble its credential (stdout)
+bash scripts/rotate-with-platform-change.sh \
+  --account ACCOUNT_DIR [--dry-run]                    # Phase 1: change platform password, Phase 2: advance vault
 
 # Notification
-bash scripts/notify-rotation.sh      # re-send notification for current index (if human missed it)
+bash scripts/notify-rotation.sh                        # re-send notification for current index
 ```
+
+### Two-phase rotation
+
+For account passwords, `rotate.sh` alone is insufficient — it only advances the vault, it doesn't change the platform password. `rotate-with-platform-change.sh` does both atomically:
+
+1. Pipes `current_password\nnew_password` to a platform-specific change-password tool
+2. Only if that succeeds, calls `rotate.sh` to advance the vault pointer
+
+If Phase 1 fails, the vault is NOT advanced — old credentials stay valid, no state corruption.
+
+The platform change tool is passed as `--headless-login SCRIPT` (default: aurora-thesean GitHub instance). For other platforms, substitute an equivalent script that reads two password lines from stdin and returns `ok` on success.
 
 ## Vault layout
 
