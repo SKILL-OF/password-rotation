@@ -20,6 +20,8 @@ STATE_VAULT="$VAULT_DIR/rotation-state.age"
 ROTATION_NOTIFY="${ROTATION_NOTIFY:-file-drop}"
 ROTATION_NOTIFY_REPO="${ROTATION_NOTIFY_REPO:-}"
 ROTATION_NOTIFY_FILE="${ROTATION_NOTIFY_FILE:-$HOME/.aurora-agent/.rotation-notification}"
+# When level=card-and-pattern, write new card ID here so instance wrappers pick it up
+ACTIVE_CARD_ID_FILE="${ACTIVE_CARD_ID_FILE:-$VAULT_DIR/active-card-id}"
 
 DRY_RUN=false
 REASON="unspecified"
@@ -83,11 +85,16 @@ fi
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# Activate: point the live pattern vault at the new entry's pattern
-# Convention: the "active" pattern vault is VAULT_DIR/gh-pattern.age (or account-scoped name)
-# We copy (not symlink) to avoid the active vault being a pointer into the queue
-ACTIVE_PATTERN_VAULT="$VAULT_DIR/gh-pattern.age"
+# Activate: copy next pattern vault into the live slot
+ACTIVE_PATTERN_VAULT="${ACTIVE_PATTERN_VAULT:-$VAULT_DIR/gh-pattern.age}"
 cp "$VAULT_DIR/$PATTERN_VAULT" "$ACTIVE_PATTERN_VAULT"
+
+# For card-and-pattern rotations, update the active card ID file
+# Instance wrappers read this file to override CARD_ID from .env
+if [[ "$LEVEL" == "card-and-pattern" ]]; then
+  printf '%s\n' "$CARD_ID" > "$ACTIVE_CARD_ID_FILE"
+  echo "  Active card ID updated: $CARD_ID → $ACTIVE_CARD_ID_FILE"
+fi
 
 # Update rotation state
 printf '{"current_index":%d,"account":"%s","updated_at":"%s","last_reason":"%s"}' \
