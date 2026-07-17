@@ -33,16 +33,22 @@ AGE_KEY="${AGE_KEY:-$HOME/.aurora-agent/keys/totp-key.txt}"
 VAULT_DIR="${VAULT_DIR:-$HOME/.aurora-agent/secrets}"
 ACCOUNT_DIR="${ACCOUNT_DIR:-$PWD}"
 HEADLESS_LOGIN="${HEADLESS_LOGIN:-$HOME/.AWG26/.AO/GitHub/auth/scripts/github-headless-login.sh}"
+# ASSEMBLE_PASSWORD: the instance's current-password assembler (cannot derive via symlink traversal)
+ASSEMBLE_PASSWORD="${ASSEMBLE_PASSWORD:-$HOME/.AWG26/.AO/GitHub/auth/scripts/assemble-password.sh}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --account)        ACCOUNT_DIR="$2"; shift 2 ;;
-    --headless-login) HEADLESS_LOGIN="$2"; shift 2 ;;
-    --dry-run)        DRY_RUN=true; shift ;;
+    --account)           ACCOUNT_DIR="$2"; shift 2 ;;
+    --headless-login)    HEADLESS_LOGIN="$2"; shift 2 ;;
+    --assemble-password) ASSEMBLE_PASSWORD="$2"; shift 2 ;;
+    --dry-run)           DRY_RUN=true; shift ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
+
+# Resolve to absolute paths
+ACCOUNT_DIR="$(cd "$ACCOUNT_DIR" && pwd)"
 
 export AGE_KEY
 export VAULT_DIR
@@ -54,6 +60,8 @@ export VAULT_DIR
 if [[ -f "$ACCOUNT_DIR/.env" ]]; then
   while IFS='=' read -r key val; do
     [[ "$key" =~ ^[A-Z_][A-Z0-9_]*$ ]] || continue
+    # Expand leading ~ in values
+    val="${val/#\~/$HOME}"
     case "$key" in GITHUB_USERNAME) export "$key"="$val" ;; esac
   done < "$ACCOUNT_DIR/.env"
 fi
@@ -83,7 +91,7 @@ echo "  Current index: $CURRENT_INDEX → Next index: $NEXT_INDEX" >&2
 if [[ "$DRY_RUN" == true ]]; then
   echo "[dry-run] Verifying vaults..." >&2
   # Verify we can decrypt current password
-  bash "$ACCOUNT_DIR/../scripts/assemble-password.sh" > /dev/null && echo "  Current password vault: OK" >&2 || {
+  bash "$ASSEMBLE_PASSWORD" > /dev/null && echo "  Current password vault: OK" >&2 || {
     echo "  error: cannot decrypt current password vault" >&2; exit 1
   }
   # Verify we can decrypt next slot
@@ -101,7 +109,7 @@ echo "--- Phase 1: Changing platform password ---" >&2
 
 CHANGE_OUTPUT=$(
   {
-    bash "$ACCOUNT_DIR/../scripts/assemble-password.sh"
+    bash "$ASSEMBLE_PASSWORD"
     bash "$SCRIPT_DIR/assemble-slot.sh" --index "$NEXT_INDEX"
   } | bash "$HEADLESS_LOGIN" --mode change-password
 )
